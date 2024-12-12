@@ -98,7 +98,39 @@ pub fn part_one(input: &str) -> Option<u32> {
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
-    None
+    let matrix = input
+        .lines()
+        .map(|l| l.chars().collect::<Vec<char>>())
+        .collect::<Vec<Vec<char>>>();
+
+    let word_of_interest = "MAS";
+    let square_size = word_of_interest.chars().count();
+    let mut count = 0;
+
+    for i in 0..matrix.len() - square_size + 1 {
+        for j in 0..matrix.len() - square_size + 1 {
+            let square = matrix[i..i + square_size]
+                .iter()
+                .enumerate()
+                .map(|(offset, _)| matrix[i + offset][j..j + square_size].to_vec())
+                .collect::<Vec<Vec<char>>>();
+            let transpose = transpose(square.clone());
+            let diagonal_1 = get_diagonal(square.clone());
+            let diagonal_2 = get_diagonal(transpose.clone());
+
+            let are_valid = [diagonal_1, diagonal_2]
+                .iter()
+                .filter(|&s| s.eq("MAS") || s.eq("SAM"))
+                .count()
+                == 2;
+
+            if are_valid {
+                count += 1;
+            }
+        }
+    }
+
+    Some(count as u32)
 }
 
 #[cfg(test)]
@@ -114,6 +146,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(9));
     }
 }
