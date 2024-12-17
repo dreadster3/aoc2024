@@ -41,7 +41,6 @@ impl Add for Vector2<i32> {
 trait Positional {
     fn position(&self) -> Vector2<i32>;
     fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 #[derive(Debug, Clone)]
@@ -54,9 +53,6 @@ impl Positional for Obstacle {
         self.position.clone()
     }
     fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -102,9 +98,6 @@ impl Positional for Guard {
         self.position.clone()
     }
     fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -298,13 +291,10 @@ pub fn part_two(input: &str) -> Option<u32> {
     };
 
     let mut solutions = HashSet::new();
-    let mut overall_visited = HashSet::new();
-    overall_visited.insert((map.guard.position(), map.guard.direction.clone()));
     map.simulation_loop(&mut |map, next_position| {
-        if overall_visited.contains(&(map.guard.position().clone(), map.guard.direction.clone())) {
+        if solutions.contains(&next_position) {
             return None;
         }
-        overall_visited.insert((map.guard.position().clone(), map.guard.direction.clone()));
 
         let mut temp_map = map.clone();
         let temp_obstacle = Obstacle {
