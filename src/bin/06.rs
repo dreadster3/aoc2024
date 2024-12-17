@@ -311,6 +311,7 @@ pub fn part_two(input: &str) -> Option<u32> {
             position: next_position.clone(),
         };
         temp_map.obstacles.push(temp_obstacle.clone());
+        temp_map.guard = guard.clone();
 
         let mut visited_dir = HashSet::new();
         let mut is_loop = false;
