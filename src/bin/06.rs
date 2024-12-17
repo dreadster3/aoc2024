@@ -27,6 +27,12 @@ struct Vector2<T> {
     y: T,
 }
 
+impl<T> Vector2<T> {
+    fn new(x: T, y: T) -> Self {
+        Self { x, y }
+    }
+}
+
 impl Add for Vector2<i32> {
     type Output = Vector2<i32>;
 
@@ -159,7 +165,7 @@ impl Map {
 
     fn simulation_loop<F>(&mut self, loop_function: &mut F)
     where
-        F: FnMut(&Map, Vector2<i32>) -> Option<bool>,
+        F: FnMut(&Map) -> Option<bool>,
     {
         loop {
             if !self.is_position_within(self.guard.position()) {
@@ -168,7 +174,7 @@ impl Map {
 
             let mut next_position = self.guard.next_position();
 
-            if self
+            while self
                 .obstacles
                 .iter()
                 .filter(|o| o.position() == next_position.clone())
@@ -179,7 +185,7 @@ impl Map {
                 next_position = self.guard.next_position();
             }
 
-            if let Some(_) = loop_function(self, next_position) {
+            if let Some(_) = loop_function(self) {
                 break;
             };
 
@@ -236,7 +242,7 @@ pub fn part_one(input: &str) -> Option<u32> {
 
     let mut visited = HashSet::new();
 
-    map.simulation_loop(&mut |map, _| {
+    map.simulation_loop(&mut |map| {
         visited.insert(map.guard.position());
 
         None
@@ -291,33 +297,28 @@ pub fn part_two(input: &str) -> Option<u32> {
     };
 
     let mut solutions = HashSet::new();
-    map.simulation_loop(&mut |map, next_position| {
-        if solutions.contains(&next_position) {
+    map.simulation_loop(&mut |map| {
+        if solutions.contains(&map.guard.position()) {
             return None;
         }
 
         let mut temp_map = map.clone();
         let temp_obstacle = Obstacle {
-            position: next_position.clone(),
+            position: map.guard.position(),
         };
         temp_map.obstacles.push(temp_obstacle.clone());
         temp_map.guard = guard.clone();
 
         let mut visited_dir = HashSet::new();
-        let mut is_loop = false;
-        temp_map.simulation_loop(&mut |map, _| {
+        temp_map.simulation_loop(&mut |map| {
             if visited_dir.contains(&(map.guard.position.clone(), map.guard.direction.clone())) {
-                is_loop = true;
-                return Some(is_loop);
+                solutions.insert(temp_obstacle.position());
+                return Some(true);
             }
 
             visited_dir.insert((map.guard.position().clone(), map.guard.direction.clone()));
             None
         });
-
-        if is_loop {
-            solutions.insert(temp_obstacle.position());
-        }
 
         None
     });
