@@ -1,180 +1,8 @@
-use std::{any::Any, borrow::BorrowMut, fmt::Debug};
+use std::{any::Any, collections::HashSet, fmt::Debug, ops::Add};
 
 advent_of_code::solution!(6);
 
-trait Positional: Debug {
-    fn position(&self) -> Position;
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Position {
-    x: i32,
-    y: i32,
-}
-
-impl Position {
-    fn up(&mut self) {
-        self.y -= 1
-    }
-
-    fn down(&mut self) {
-        self.y += 1
-    }
-
-    fn right(&mut self) {
-        self.x += 1
-    }
-
-    fn left(&mut self) {
-        self.x -= 1
-    }
-
-    fn is_within(&self, start: Position, end: Position) -> bool {
-        return self.x >= start.x && self.x <= end.x && self.y >= start.y && self.y <= end.y;
-    }
-}
-
-impl PartialEq for Position {
-    fn eq(&self, other: &Self) -> bool {
-        return self.x == other.x && self.y == other.y;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Object {
-    position: Position,
-}
-
-impl Positional for Object {
-    fn position(&self) -> Position {
-        self.position
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
-#[derive(Debug)]
-struct Guard {
-    position: Position,
-    direction: Direction,
-}
-
-impl Guard {
-    fn walk(&mut self) {
-        match self.direction {
-            Direction::Right => self.position.right(),
-            Direction::Left => self.position.left(),
-            Direction::Up => self.position.up(),
-            Direction::Down => self.position.down(),
-        }
-    }
-
-    fn back(&mut self) {
-        match self.direction {
-            Direction::Right => self.position.left(),
-            Direction::Left => self.position.right(),
-            Direction::Up => self.position.down(),
-            Direction::Down => self.position.up(),
-        }
-    }
-
-    fn turn_right(&mut self) {
-        self.direction = match self.direction {
-            Direction::Right => Direction::Down,
-            Direction::Up => Direction::Right,
-            Direction::Left => Direction::Up,
-            Direction::Down => Direction::Left,
-        }
-    }
-}
-
-impl Positional for Guard {
-    fn position(&self) -> Position {
-        self.position
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
-struct Map {
-    width: u32,
-    height: u32,
-    objects: Vec<Box<dyn Positional>>,
-}
-
-impl Map {
-    fn play(&mut self) -> u32 {
-        let objects = self.objects().map(|o| *o).collect::<Vec<Object>>();
-        let width = self.width as u32;
-        let height = self.height as u32;
-        let start = Position { x: 0, y: 0 };
-        let end = Position {
-            x: width as i32 - 1,
-            y: height as i32 - 1,
-        };
-
-        let guard = self.guard_mut();
-        let mut history = vec![guard.position()];
-        let mut count = 0;
-        while guard.position().is_within(start, end) {
-            println!("{guard:?}");
-            guard.walk();
-
-            if objects
-                .iter()
-                .filter(|o| o.position().eq(&guard.position()))
-                .count()
-                > 0
-            {
-                guard.back();
-                guard.turn_right();
-                guard.walk();
-            }
-
-            if !history.contains(&guard.position()) {
-                count += 1;
-                history.push(guard.position());
-            }
-        }
-
-        count
-    }
-
-    fn guard_mut(&mut self) -> &mut Guard {
-        let guard = self
-            .objects
-            .iter_mut()
-            .filter_map(|o| o.as_any_mut().downcast_mut::<Guard>())
-            .next()
-            .unwrap();
-
-        return guard;
-    }
-
-    fn objects(&self) -> impl Iterator<Item = &Object> + Clone {
-        let objects = self
-            .objects
-            .iter()
-            .filter_map(|o| o.as_any().downcast_ref::<Object>());
-
-        return objects;
-    }
-}
-
-#[derive(Debug)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 enum Direction {
     Right,
     Left,
@@ -182,8 +10,193 @@ enum Direction {
     Down,
 }
 
+impl Into<Vector2<i32>> for Direction {
+    fn into(self) -> Vector2<i32> {
+        match self {
+            Direction::Right => Vector2 { x: 1, y: 0 },
+            Direction::Left => Vector2 { x: -1, y: 0 },
+            Direction::Up => Vector2 { x: 0, y: -1 },
+            Direction::Down => Vector2 { x: 0, y: 1 },
+        }
+    }
+}
+
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq)]
+struct Vector2<T> {
+    x: T,
+    y: T,
+}
+
+impl<T> Vector2<T> {
+    fn new(x: T, y: T) -> Self {
+        Self { x, y }
+    }
+}
+
+impl Add for Vector2<i32> {
+    type Output = Vector2<i32>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Vector2 {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+trait Positional {
+    fn position(&self) -> Vector2<i32>;
+    fn as_any(&self) -> &dyn Any;
+}
+
+#[derive(Debug, Clone)]
+struct Obstacle {
+    position: Vector2<i32>,
+}
+
+impl Positional for Obstacle {
+    fn position(&self) -> Vector2<i32> {
+        self.position.clone()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Guard {
+    position: Vector2<i32>,
+    direction: Direction,
+}
+
+impl Guard {
+    fn next_position(&self) -> Vector2<i32> {
+        self.position + self.direction.clone().into()
+    }
+
+    fn turn_right(&mut self) {
+        self.direction = match self.direction {
+            Direction::Right => Direction::Down,
+            Direction::Up => Direction::Right,
+            Direction::Down => Direction::Left,
+            Direction::Left => Direction::Up,
+        }
+    }
+
+    fn walk(&mut self) {
+        self.position = self.next_position()
+    }
+}
+
+impl Into<char> for Guard {
+    fn into(self) -> char {
+        match self.direction {
+            Direction::Up => '^',
+            Direction::Right => '>',
+            Direction::Left => '<',
+            Direction::Down => 'v',
+        }
+    }
+}
+
+impl Positional for Guard {
+    fn position(&self) -> Vector2<i32> {
+        self.position.clone()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Clone)]
+struct Map {
+    width: usize,
+    height: usize,
+    guard: Guard,
+    obstacles: Vec<Obstacle>,
+}
+
+impl Debug for Map {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut representation = String::new();
+
+        for i in 0..self.height {
+            for j in 0..self.width {
+                let position = Vector2 {
+                    x: j as i32,
+                    y: i as i32,
+                };
+                if self
+                    .obstacles
+                    .iter()
+                    .filter(|o| o.position() == position)
+                    .count()
+                    > 0
+                {
+                    representation.push('#');
+                } else if self.guard.position() == position {
+                    representation.push(self.guard.clone().into());
+                } else {
+                    representation.push('.');
+                }
+            }
+            representation.push('\n');
+        }
+
+        f.write_str(representation.as_str())
+    }
+}
+
+impl Map {
+    fn is_position_within(&self, position: Vector2<i32>) -> bool {
+        let width = self.width as i32;
+        let height = self.height as i32;
+
+        if position.x < 0 || position.x >= width {
+            return false;
+        }
+
+        if position.y < 0 || position.y >= height {
+            return false;
+        }
+
+        true
+    }
+
+    fn simulation_loop<F>(&mut self, loop_function: &mut F)
+    where
+        F: FnMut(&Map) -> Option<bool>,
+    {
+        loop {
+            if !self.is_position_within(self.guard.position()) {
+                break;
+            }
+
+            let mut next_position = self.guard.next_position();
+
+            while self
+                .obstacles
+                .iter()
+                .filter(|o| o.position() == next_position.clone())
+                .count()
+                > 0
+            {
+                self.guard.turn_right();
+                next_position = self.guard.next_position();
+            }
+
+            if let Some(_) = loop_function(self) {
+                break;
+            };
+
+            self.guard.walk();
+        }
+    }
+}
+
 pub fn part_one(input: &str) -> Option<u32> {
     let width = input.lines().next().unwrap().chars().count();
+
     let height = input.lines().count();
 
     let objects = input
@@ -191,12 +204,13 @@ pub fn part_one(input: &str) -> Option<u32> {
         .enumerate()
         .flat_map(move |(i, r)| {
             r.chars().enumerate().filter_map(move |(j, c)| {
-                let position = Position {
+                let position = Vector2::<i32> {
                     x: j as i32,
                     y: i as i32,
                 };
+
                 match c {
-                    '#' => Some(Box::new(Object { position }) as Box<dyn Positional>),
+                    '#' => Some(Box::new(Obstacle { position }) as Box<dyn Positional>),
                     '^' => Some(Box::new(Guard {
                         direction: Direction::Up,
                         position,
@@ -205,21 +219,111 @@ pub fn part_one(input: &str) -> Option<u32> {
                 }
             })
         })
-        .collect::<Vec<Box<dyn Positional>>>();
+        .collect::<Vec<_>>();
+
+    let guard = objects
+        .iter()
+        .filter_map(|o| o.as_any().downcast_ref::<Guard>())
+        .next()
+        .unwrap();
+
+    let obstacles = objects
+        .iter()
+        .filter_map(|o| o.as_any().downcast_ref::<Obstacle>())
+        .map(|o| o.clone())
+        .collect::<Vec<_>>();
 
     let mut map = Map {
-        width: width as u32,
-        height: height as u32,
-        objects,
+        width,
+        height,
+        guard: guard.clone(),
+        obstacles,
     };
 
-    let count = map.play();
+    let mut visited = HashSet::new();
 
-    Some(count)
+    map.simulation_loop(&mut |map| {
+        visited.insert(map.guard.position());
+
+        None
+    });
+
+    Some(visited.len() as u32)
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
-    None
+    let width = input.lines().next().unwrap().chars().count();
+    let height = input.lines().count();
+
+    let objects = input
+        .lines()
+        .enumerate()
+        .flat_map(move |(i, r)| {
+            r.chars().enumerate().filter_map(move |(j, c)| {
+                let position = Vector2::<i32> {
+                    x: j as i32,
+                    y: i as i32,
+                };
+
+                match c {
+                    '#' => Some(Box::new(Obstacle { position }) as Box<dyn Positional>),
+                    '^' => Some(Box::new(Guard {
+                        direction: Direction::Up,
+                        position,
+                    }) as Box<dyn Positional>),
+                    _ => None,
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let guard = objects
+        .iter()
+        .filter_map(|o| o.as_any().downcast_ref::<Guard>())
+        .next()
+        .unwrap();
+
+    let obstacles = objects
+        .iter()
+        .filter_map(|o| o.as_any().downcast_ref::<Obstacle>())
+        .map(|o| o.clone())
+        .collect::<Vec<_>>();
+
+    let mut map = Map {
+        width,
+        height,
+        guard: guard.clone(),
+        obstacles,
+    };
+
+    let mut solutions = HashSet::new();
+    map.simulation_loop(&mut |map| {
+        if solutions.contains(&map.guard.position()) {
+            return None;
+        }
+
+        let mut temp_map = map.clone();
+        let temp_obstacle = Obstacle {
+            position: map.guard.position(),
+        };
+        temp_map.obstacles.push(temp_obstacle.clone());
+        temp_map.guard = guard.clone();
+
+        let mut visited_dir = HashSet::new();
+        temp_map.simulation_loop(&mut |map| {
+            if visited_dir.contains(&(map.guard.position.clone(), map.guard.direction.clone())) {
+                solutions.insert(temp_obstacle.position());
+                return Some(true);
+            }
+
+            visited_dir.insert((map.guard.position().clone(), map.guard.direction.clone()));
+            None
+        });
+
+        None
+    });
+
+    Some(solutions.len() as u32)
 }
 
 #[cfg(test)]
@@ -235,6 +339,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(6));
     }
 }
