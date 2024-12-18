@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
+    iter::from_fn,
     ops::{Add, Mul, Sub},
 };
 
@@ -73,23 +74,25 @@ impl Point {
     fn antinode(self, other: Self) -> (Point, Point) {
         let distance_vector = self - other;
 
-        (other + (distance_vector * -1), self + distance_vector)
+        (other - distance_vector, self + distance_vector)
     }
-}
 
-#[derive(Debug, Clone, Copy)]
-struct Tower {
-    position: Point,
-    frequency: char,
-}
-
-impl Tower {
-    fn antinode(&self, other: Self) -> (Point, Point) {
-        let distance_vector = self.position - other.position;
-
+    fn antinode_harmonic(
+        self,
+        other: Self,
+    ) -> (impl Iterator<Item = Self>, impl Iterator<Item = Self>) {
+        let distance_vector = self - other;
+        let mut current_1 = self;
+        let mut current_2 = other;
         (
-            other.position + (distance_vector * -1),
-            self.position + distance_vector,
+            from_fn(move || {
+                current_1 = current_1 + distance_vector;
+                Some(current_1)
+            }),
+            from_fn(move || {
+                current_2 = current_2 - distance_vector;
+                Some(current_2)
+            }),
         )
     }
 }
@@ -126,6 +129,30 @@ fn exponential_antinodes(points: Vec<Point>) -> Vec<Point> {
     antinodes
 }
 
+fn exponential_antinodes_harmonic(points: Vec<Point>) -> Vec<Box<dyn Iterator<Item = Point>>> {
+    let first = points[0];
+    if points.len() == 2 {
+        let (antinode_1, antinode_2) = first.antinode_harmonic(points[1]);
+        return vec![Box::new(antinode_1), Box::new(antinode_2)];
+    }
+
+    let others = points[1..].to_vec();
+
+    let mut antinodes = others
+        .iter()
+        .flat_map(|&t| {
+            let (antinode_1, antinode_2) = first.antinode_harmonic(t);
+            vec![
+                Box::new(antinode_1) as Box<dyn Iterator<Item = Point>>,
+                Box::new(antinode_2) as Box<dyn Iterator<Item = Point>>,
+            ]
+        })
+        .collect::<Vec<_>>();
+    antinodes.append(&mut exponential_antinodes_harmonic(others));
+
+    antinodes
+}
+
 pub fn part_one(input: &str) -> Option<u32> {
     let height = input.lines().count();
     let width = input.lines().next().unwrap().len();
@@ -158,7 +185,36 @@ pub fn part_one(input: &str) -> Option<u32> {
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
-    None
+    let height = input.lines().count();
+    let width = input.lines().next().unwrap().len();
+
+    let towers = input
+        .lines()
+        .enumerate()
+        .flat_map(|(i, l)| {
+            l.chars().enumerate().filter_map(move |(j, f)| match f {
+                '.' => None,
+                _ => Some((f, Point::new(j as i32, i as i32))),
+            })
+        })
+        .fold(HashMap::<char, Vec<Point>>::new(), |mut acc, (f, p)| {
+            acc.entry(f).and_modify(|v| v.push(p)).or_insert(vec![p]);
+            acc
+        });
+
+    let mut antinodes = HashSet::new();
+    for (_, v) in towers {
+        antinodes.extend(v.iter());
+        antinodes.extend(
+            exponential_antinodes_harmonic(v)
+                .into_iter()
+                .flat_map(|iterator| iterator.take_while(|p| is_within_map(height, width, *p))),
+        );
+    }
+
+    let result = antinodes.len();
+
+    Some(result as u32)
 }
 
 #[cfg(test)]
@@ -174,6 +230,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(34));
     }
 }
